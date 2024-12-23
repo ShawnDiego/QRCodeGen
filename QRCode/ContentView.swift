@@ -1,66 +1,72 @@
-//
-//  ContentView.swift
-//  QRCode
-//
-//  Created by 邵文萱(ShaoWenxuan)-顺丰科技技术集团 on 2024/12/23.
-//
-
 import SwiftUI
-import SwiftData
+import AppKit
+import CoreImage.CIFilterBuiltins
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var input: String = ""
+    @State private var qrCode: Image?
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
+        NavigationView {
+            VStack(spacing: 20) {
+                // 输入框
+                TextField("请输入内容", text: $input)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding()
+
+                // 生成按钮
+                Button("生成 QR Code") {
+                    qrCode = createQRCodeImage(content: input, size: 300)
                 }
-                .onDelete(perform: deleteItems)
+                .buttonStyle(.borderedProminent)
+
+                // 展示二维码
+                if let qrCode = qrCode {
+                    qrCode
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: 300)
+                        .padding()
+                } else {
+                    Text("二维码将显示在这里")
+                        .foregroundColor(.gray)
+                        .padding()
+                }
+
+                Spacer()
             }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
+            .navigationTitle("QR Code 生成器")
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    func createQRCodeImage(content: String, size: CGFloat) -> Image? {
+        let filter = CIFilter.qrCodeGenerator()
+        let data = content.data(using: .utf8)
+        filter.setValue(data, forKey: "inputMessage")
+        
+        guard let ciImage = filter.outputImage else {
+            return nil
         }
-    }
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
+        // 设置放大比例，确保输出图像更清晰
+        let scaleX = size / ciImage.extent.size.width
+        let scaleY = size / ciImage.extent.size.height
+        let transformedImage = ciImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+        
+        // 使用 CIContext 渲染 CIImage 到 CGImage
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(transformedImage, from: transformedImage.extent) else {
+            return nil
         }
+        
+        // 使用 CGImage 创建 NSImage
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: size, height: size))
+        
+        // 返回 SwiftUI Image
+        return Image(nsImage: nsImage)
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
