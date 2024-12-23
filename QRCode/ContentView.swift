@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var qrCode: Image?
     @State private var history: [QRCodeHistoryItem] = [] // 存储二维码和文字的历史记录
     @State private var showDeleteConfirmation = false // 控制“全部删除”确认对话框
+    @State private var isWindowAlwaysOnTop = false // 窗口置顶状态
 
     var body: some View {
         NavigationView {
@@ -31,6 +32,9 @@ struct ContentView: View {
                                     .lineLimit(1)
                                     .truncationMode(.tail) // 文字过长时截断
                             }
+                            .onTapGesture {
+                                selectHistoryItem(item)
+                            }
                             .contextMenu {
                                 Button("删除") {
                                     deleteItem(item)
@@ -47,7 +51,6 @@ struct ContentView: View {
                 } label: {
                     Label("全部删除", systemImage: "trash")
                         .foregroundColor(.red)
-                    
                 }
                 .buttonStyle(.plain) // 移除默认背景样式
                 .padding()
@@ -62,11 +65,32 @@ struct ContentView: View {
 
             // 主界面
             VStack(spacing: 20) {
+                HStack {
+                    // 侧边栏切换按钮（仅在 macOS 显示）
+                    #if os(macOS)
+                    HStack{
+                        Button(action: toggleSidebar) {
+                            Label("侧边栏",systemImage: "sidebar.leading")
+                        }
+                        .padding()
+                        Button {
+                            toggleWindowAlwaysOnTop()
+                        } label: {
+                            Label(isWindowAlwaysOnTop ? "取消置顶" : "置顶窗口", systemImage: isWindowAlwaysOnTop ? "pin.slash" : "pin")
+                        }
+                        .padding()
+                    }
+
+                    #endif
+
+                    Spacer()
+                }
+
                 TextField("请输入内容", text: $input)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding()
 
-                Button("生成 QR Code") {
+                Button("生成二维码") {
                     if let newQRCode = createQRCodeImage(content: input, size: 300) {
                         qrCode = newQRCode
                         let newItem = QRCodeHistoryItem(image: newQRCode, text: input)
@@ -89,7 +113,7 @@ struct ContentView: View {
 
                 Spacer()
             }
-            .navigationTitle("QR Code 生成器")
+            .navigationTitle("二维码生成器")
         }
     }
 
@@ -98,6 +122,12 @@ struct ContentView: View {
         if let index = history.firstIndex(where: { $0.id == item.id }) {
             history.remove(at: index)
         }
+    }
+
+    /// 选择历史记录条目
+    func selectHistoryItem(_ item: QRCodeHistoryItem) {
+        qrCode = item.image
+        input = item.text
     }
 
     /// 创建二维码图片
@@ -127,6 +157,23 @@ struct ContentView: View {
         // 返回 SwiftUI Image
         return Image(nsImage: nsImage)
     }
+
+    /// 切换窗口置顶状态（仅限 macOS）
+    #if os(macOS)
+    func toggleWindowAlwaysOnTop() {
+        if let window = NSApp.keyWindow {
+            window.level = isWindowAlwaysOnTop ? .normal : .floating
+            isWindowAlwaysOnTop.toggle()
+        }
+    }
+    #endif
+
+    /// 切换侧边栏显示/隐藏（仅限 macOS）
+    #if os(macOS)
+    func toggleSidebar() {
+        NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar), with: nil)
+    }
+    #endif
 }
 
 #Preview {
