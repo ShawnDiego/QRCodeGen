@@ -2,36 +2,6 @@ import SwiftUI
 import AppKit
 import CoreImage.CIFilterBuiltins
 
-struct QRCodeHistoryItem: Identifiable {
-    let id = UUID()
-    let image: Image
-    let text: String
-    let isBatchGenerated: Bool // 是否为批量生成的一部分
-    let batchIndex: Int? // 在批量生成中的索引，可选
-    let batchTimestamp: Date? // 批量生成的时间戳，用于将同一批次的项目关联起来
-    let createTime: Date // 生成时间
-    
-    // 简便初始化方法，默认为非批量生成
-    init(image: Image, text: String) {
-        self.image = image
-        self.text = text
-        self.isBatchGenerated = false
-        self.batchIndex = nil
-        self.batchTimestamp = nil
-        self.createTime = Date()
-    }
-    
-    // 批量生成项目的初始化方法
-    init(image: Image, text: String, batchIndex: Int, batchTimestamp: Date) {
-        self.image = image
-        self.text = text
-        self.isBatchGenerated = true
-        self.batchIndex = batchIndex
-        self.batchTimestamp = batchTimestamp
-        self.createTime = Date()
-    }
-}
-
 struct ContentView: View {
     @State private var input: String = ""
     @State private var qrCode: Image?
