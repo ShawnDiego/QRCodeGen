@@ -6,6 +6,27 @@ struct QRCodeHistoryItem: Identifiable {
     let id = UUID()
     let image: Image
     let text: String
+    let isBatchGenerated: Bool // 是否为批量生成的一部分
+    let batchIndex: Int? // 在批量生成中的索引，可选
+    let batchTimestamp: Date? // 批量生成的时间戳，用于将同一批次的项目关联起来
+    
+    // 简便初始化方法，默认为非批量生成
+    init(image: Image, text: String) {
+        self.image = image
+        self.text = text
+        self.isBatchGenerated = false
+        self.batchIndex = nil
+        self.batchTimestamp = nil
+    }
+    
+    // 批量生成项目的初始化方法
+    init(image: Image, text: String, batchIndex: Int, batchTimestamp: Date) {
+        self.image = image
+        self.text = text
+        self.isBatchGenerated = true
+        self.batchIndex = batchIndex
+        self.batchTimestamp = batchTimestamp
+    }
 }
 
 struct ContentView: View {
@@ -26,6 +47,88 @@ struct ContentView: View {
     @State private var showBatchView = false // 控制批量生成结果的显示
     @State private var isGenerating = false // 是否正在生成二维码
     @State private var generationMessage = "" // 生成状态消息
+    @State private var selectedBatchTimestamp: Date? = nil // 选中的批次时间戳
+    @State private var showBatchHistoryView = false // 显示批次历史视图
+    @State private var qrCodeSize: CGFloat = 200 // 默认二维码大小
+    @State private var batchQRCodeSize: CGFloat = 150 // 批量二维码的默认大小
+    @State private var isBatchGenerationEnabled = false // 控制批量生成功能的启用状态
+    
+    // 自定义生成二维码按钮视图
+    private var generateQRCodeButton: some View {
+        Button {
+            if showAdvancedOptions && isBatchGenerationEnabled {
+                // 如果高级选项打开且批量生成已启用，执行批量生成
+                isGenerating = true
+                generationMessage = "正在批量生成二维码..."
+                
+                // 使用异步操作避免界面卡顿
+                DispatchQueue.global(qos: .userInitiated).async {
+                    generateBatchQRCodes()
+                    
+                    DispatchQueue.main.async {
+                        isGenerating = false
+                        generationMessage = "生成完成！共\(batchGeneratedQRCodes.count)个二维码"
+                    }
+                }
+            } else {
+                // 否则执行单个二维码生成
+                isGenerating = true
+                generationMessage = "正在生成二维码..."
+                
+                if let newQRCode = createQRCodeImage(content: input, size: qrCodeSize) {
+                    qrCode = newQRCode
+                    let newItem = QRCodeHistoryItem(image: newQRCode, text: input)
+                    history.insert(newItem, at: 0) // 将新记录添加到历史顶部
+                    isGenerating = false
+                    generationMessage = "生成成功！"
+                } else {
+                    isGenerating = false
+                    generationMessage = "生成失败，请检查输入内容"
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "qrcode.viewfinder")
+                    .font(.title2)
+//                    .symbolEffect(.bounce, options: .repeating, value: isGenerating)
+                
+                Text("生成二维码")
+                    .font(.headline)
+                
+                if isGenerating {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .padding(.leading, 4)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.blue,
+                                Color.blue.opacity(0.8)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
+            )
+            .foregroundColor(.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            )
+            .scaleEffect(isGenerating ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isGenerating)
+        }
+        .buttonStyle(.plain)
+        .disabled(input.isEmpty || isGenerating)
+        .keyboardShortcut(.return, modifiers: [.command])
+    }
     
     var body: some View {
         NavigationView {
@@ -40,16 +143,45 @@ struct ContentView: View {
                                     .scaledToFit()
                                     .frame(width: 50, height: 50) // 调整二维码缩略图大小
                                     .padding(5)
-                                Text(item.text)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail) // 文字过长时截断
+                                
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(item.text)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail) // 文字过长时截断
+                                    
+                                    if item.isBatchGenerated {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "rectangle.on.rectangle")
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                            
+                                            Text("批量生成")
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                                
+                                Spacer()
                             }
                             .onTapGesture {
                                 selectHistoryItem(item)
                             }
                             .contextMenu {
+                                Button("使用此内容") {
+                                    selectHistoryItem(item)
+                                }
+                                
                                 Button("删除") {
                                     deleteItem(item)
+                                }
+                                
+                                if item.isBatchGenerated {
+                                    Divider()
+                                    
+                                    Button("查看同批次项目") {
+                                        viewBatchItems(timestamp: item.batchTimestamp!)
+                                    }
                                 }
                             }
                         }
@@ -100,6 +232,72 @@ struct ContentView: View {
                     }
                     .padding(.top)
 
+                    // 二维码显示区域
+                    if !batchGeneratedQRCodes.isEmpty {
+                        Button("查看批量生成结果 (\(batchGeneratedQRCodes.count)个)") {
+                            showBatchView = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if showBatchView && !batchGeneratedQRCodes.isEmpty {
+                        // 批量生成的二维码展示区域
+                        batchQRCodeView
+                    } else if let qrCode = qrCode {
+                        VStack(spacing: 10) {
+                            qrCode
+                                .resizable()
+                                .interpolation(.none)
+                                .scaledToFit()
+                                .frame(width: qrCodeSize, height: qrCodeSize)
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.white)
+                                        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .transition(.scale.combined(with: .opacity))
+                                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: qrCodeSize)
+                            
+                            // 单个二维码尺寸快速调整按钮
+                            HStack(spacing: 15) {
+                                Button(action: { qrCodeSize = max(qrCodeSize - 50, 100) }) {
+                                    Image(systemName: "minus.magnifyingglass")
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(qrCodeSize <= 100)
+                                
+                                Text("\(Int(qrCodeSize))×\(Int(qrCodeSize))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                Button(action: { qrCodeSize = min(qrCodeSize + 50, 400) }) {
+                                    Image(systemName: "plus.magnifyingglass")
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(qrCodeSize >= 400)
+                            }
+                        }
+                    } else {
+                        Text("二维码将显示在这里")
+                            .foregroundColor(.gray)
+                            .padding()
+                            .frame(width: qrCodeSize, height: qrCodeSize)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.5))
+                                    .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            )
+                    }
+
                     // 使用TextEditor替代TextField提供更好的多行输入体验
                     VStack(alignment: .leading) {
                         Text("输入内容:")
@@ -133,9 +331,42 @@ struct ContentView: View {
                                 .font(.headline)
                                 .foregroundColor(.primary)
                             
+                            // 二维码尺寸设置
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("二维码尺寸调整")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .padding(.top, 5)
+                                
+                                HStack {
+                                    Text("单个:")
+                                        .font(.caption)
+                                    Slider(value: $qrCodeSize, in: 100...400, step: 10)
+                                        .frame(width: 120)
+                                    Text("\(Int(qrCodeSize))px")
+                                        .font(.caption)
+                                        .frame(width: 50, alignment: .trailing)
+                                }
+                                
+                                HStack {
+                                    Text("批量:")
+                                        .font(.caption)
+                                    Slider(value: $batchQRCodeSize, in: 80...250, step: 10)
+                                        .frame(width: 120)
+                                    Text("\(Int(batchQRCodeSize))px")
+                                        .font(.caption)
+                                        .frame(width: 50, alignment: .trailing)
+                                }
+                            }
+                            
                             Text("输入多行内容或使用分隔符，将为每一部分内容生成二维码")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .padding(.bottom, 5)
+                            
+                            // 修改批量生成开关
+                            Toggle("启用批量生成", isOn: $isBatchGenerationEnabled)
+                                .toggleStyle(.switch)
                                 .padding(.bottom, 5)
                             
                             HStack(alignment: .top, spacing: 20) {
@@ -234,42 +465,7 @@ struct ContentView: View {
                     }
                     .padding(.horizontal)
 
-                    Button("生成二维码") {
-                        if showAdvancedOptions {
-                            // 如果高级选项打开，执行批量生成（使用设置的分隔符或默认换行符）
-                            isGenerating = true
-                            generationMessage = "正在批量生成二维码..."
-                            
-                            // 使用异步操作避免界面卡顿
-                            DispatchQueue.global(qos: .userInitiated).async {
-                                generateBatchQRCodes()
-                                
-                                DispatchQueue.main.async {
-                                    isGenerating = false
-                                    generationMessage = "生成完成！共\(batchGeneratedQRCodes.count)个二维码"
-                                }
-                            }
-                        } else {
-                            // 否则执行单个二维码生成
-                            isGenerating = true
-                            generationMessage = "正在生成二维码..."
-                            
-                            if let newQRCode = createQRCodeImage(content: input, size: 300) {
-                                qrCode = newQRCode
-                                let newItem = QRCodeHistoryItem(image: newQRCode, text: input)
-                                history.insert(newItem, at: 0) // 将新记录添加到历史顶部
-                                isGenerating = false
-                                generationMessage = "生成成功！"
-                            } else {
-                                isGenerating = false
-                                generationMessage = "生成失败，请检查输入内容"
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding()
-                    .keyboardShortcut(.return, modifiers: [.command]) // 添加快捷键Cmd+Return
-                    .disabled(input.isEmpty || isGenerating) // 如果输入为空或正在生成则禁用
+                    generateQRCodeButton
                     
                     if isGenerating {
                         HStack {
@@ -288,29 +484,6 @@ struct ContentView: View {
                             .padding(.bottom, 5)
                     }
                     
-                    if !batchGeneratedQRCodes.isEmpty {
-                        Button("查看批量生成结果 (\(batchGeneratedQRCodes.count)个)") {
-                            showBatchView = true
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    if showBatchView && !batchGeneratedQRCodes.isEmpty {
-                        // 批量生成的二维码展示区域
-                        batchQRCodeView
-                    } else if let qrCode = qrCode {
-                        qrCode
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: 300)
-                            .padding()
-                    } else {
-                        Text("二维码将显示在这里")
-                            .foregroundColor(.gray)
-                            .padding()
-                            .frame(height: 200)
-                    }
-                    
                     Spacer(minLength: 20)
                 }
                 .padding(.bottom)
@@ -320,6 +493,15 @@ struct ContentView: View {
             .sheet(isPresented: $showBatchView) {
                 BatchQRCodeDisplayView(qrCodes: batchGeneratedQRCodes) {
                     showBatchView = false
+                }
+            }
+            .sheet(isPresented: $showBatchHistoryView) {
+                if let timestamp = selectedBatchTimestamp {
+                    BatchHistoryView(
+                        timestamp: timestamp,
+                        historyItems: history.filter { $0.batchTimestamp == timestamp },
+                        onDismiss: { showBatchHistoryView = false }
+                    )
                 }
             }
         }
@@ -348,12 +530,12 @@ struct ContentView: View {
                         batchGeneratedQRCodes[index].image
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 150, height: 150)
+                            .frame(width: batchQRCodeSize, height: batchQRCodeSize)
                         
                         Text(batchGeneratedQRCodes[index].text)
                             .font(.caption)
                             .lineLimit(2)
-                            .frame(width: 150)
+                            .frame(width: batchQRCodeSize)
                     }
                     .padding()
                     .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
@@ -383,21 +565,35 @@ struct ContentView: View {
         let texts = input.components(separatedBy: actualSeparator)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         
-        var newQRCodes: [(text: String, image: Image)] = []
+        // 如果没有有效内容，直接返回
+        if texts.isEmpty {
+            return
+        }
         
-        for text in texts {
+        var newQRCodes: [(text: String, image: Image)] = []
+        let batchTimestamp = Date() // 为整个批次创建一个时间戳
+        
+        for (index, text) in texts.enumerated() {
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let qrImage = createQRCodeImage(content: trimmedText, size: 150) {
+            if let qrImage = createQRCodeImage(content: trimmedText, size: batchQRCodeSize) {
                 newQRCodes.append((text: trimmedText, image: qrImage))
+                
+                // 创建带有批量信息的历史记录项
+                let newItem = QRCodeHistoryItem(
+                    image: qrImage,
+                    text: trimmedText,
+                    batchIndex: index,
+                    batchTimestamp: batchTimestamp
+                )
+                
+                // 检查是否已存在相同内容的记录，避免重复
+                if !history.contains(where: { $0.text == trimmedText }) {
+                    history.insert(newItem, at: 0) // 将新记录添加到历史顶部
+                }
             }
         }
         
         batchGeneratedQRCodes = newQRCodes
-        
-        if !newQRCodes.isEmpty {
-            // 界面更新移到调用方的主线程
-            // showBatchView = true
-        }
     }
 
     // 自动检测输入内容中可能的分隔符
@@ -477,18 +673,18 @@ struct ContentView: View {
             return nil
         }
 
-        // 设置放大比例，确保输出图像更清晰
+        // 直接设置输出图像的大小
         let scaleX = size / ciImage.extent.size.width
         let scaleY = size / ciImage.extent.size.height
         let transformedImage = ciImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
         
         // 使用 CIContext 渲染 CIImage 到 CGImage
         let context = CIContext()
-        guard let cgImage = context.createCGImage(transformedImage, from: transformedImage.extent) else {
+        guard let cgImage = context.createCGImage(transformedImage, from: CGRect(x: 0, y: 0, width: size, height: size)) else {
             return nil
         }
         
-        // 使用 CGImage 创建 NSImage
+        // 使用 CGImage 创建 NSImage，确保大小完全一致
         let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: size, height: size))
         
         // 返回 SwiftUI Image
@@ -534,6 +730,12 @@ struct ContentView: View {
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         return texts.count
     }
+
+    // 查看同批次项目
+    func viewBatchItems(timestamp: Date) {
+        selectedBatchTimestamp = timestamp
+        showBatchHistoryView = true
+    }
 }
 
 // 批量二维码全屏展示视图
@@ -544,6 +746,7 @@ struct BatchQRCodeDisplayView: View {
     @State private var selectedQRCode: QRCodeDetailWrapper? = nil
     @State private var columns = [GridItem(.adaptive(minimum: 180))]
     @State private var gridSpacing: CGFloat = 20
+    @State private var displayQRCodeSize: CGFloat = 150 // 展示视图中二维码的大小
     
     var body: some View {
         VStack {
@@ -599,32 +802,63 @@ struct BatchQRCodeDisplayView: View {
     
     // 控制视图 - 调整间距和网格大小
     private var controlsView: some View {
-        HStack {
-            Slider(value: $gridSpacing, in: 10...50) {
-                Text("间距")
+        VStack(spacing: 10) {
+            HStack {
+                Text("网格间距:")
+                    .font(.caption)
+                
+                Slider(value: $gridSpacing, in: 10...50) {
+                    Text("间距")
+                }
+                .frame(width: 100)
+                
+                Text("\(Int(gridSpacing))px")
+                    .font(.caption)
+                    .frame(width: 40)
+                
+                Spacer()
+                
+                Button(action: { columns = [GridItem(.adaptive(minimum: 120))] }) {
+                    Image(systemName: "square.grid.3x3")
+                }
+                .buttonStyle(.bordered)
+                
+                Button(action: { columns = [GridItem(.adaptive(minimum: 180))] }) {
+                    Image(systemName: "square.grid.2x2")
+                }
+                .buttonStyle(.bordered)
+                
+                Button(action: { columns = [GridItem(.adaptive(minimum: 250))] }) {
+                    Image(systemName: "square.grid.2x2.fill")
+                }
+                .buttonStyle(.bordered)
             }
-            .frame(width: 100)
             
-            Text("间距: \(Int(gridSpacing))")
-                .font(.caption)
-                .frame(width: 60)
-            
-            Spacer()
-            
-            Button(action: { columns = [GridItem(.adaptive(minimum: 120))] }) {
-                Image(systemName: "square.grid.3x3")
+            HStack {
+                Text("二维码大小:")
+                    .font(.caption)
+                
+                Slider(value: $displayQRCodeSize, in: 80...250, step: 10)
+                    .frame(width: 100)
+                
+                Text("\(Int(displayQRCodeSize))px")
+                    .font(.caption)
+                    .frame(width: 40)
+                
+                Spacer()
+                
+                Button(action: { displayQRCodeSize = max(displayQRCodeSize - 20, 80) }) {
+                    Image(systemName: "minus.magnifyingglass")
+                }
+                .buttonStyle(.bordered)
+                .disabled(displayQRCodeSize <= 80)
+                
+                Button(action: { displayQRCodeSize = min(displayQRCodeSize + 20, 250) }) {
+                    Image(systemName: "plus.magnifyingglass")
+                }
+                .buttonStyle(.bordered)
+                .disabled(displayQRCodeSize >= 250)
             }
-            .buttonStyle(.bordered)
-            
-            Button(action: { columns = [GridItem(.adaptive(minimum: 180))] }) {
-                Image(systemName: "square.grid.2x2")
-            }
-            .buttonStyle(.bordered)
-            
-            Button(action: { columns = [GridItem(.adaptive(minimum: 250))] }) {
-                Image(systemName: "square.grid.2x2.fill")
-            }
-            .buttonStyle(.bordered)
         }
         .padding(.horizontal)
     }
@@ -649,14 +883,13 @@ struct BatchQRCodeDisplayView: View {
                 .resizable()
                 .interpolation(.none) // 保持二维码清晰
                 .scaledToFit()
-                .frame(maxWidth: .infinity)
+                .frame(width: displayQRCodeSize, height: displayQRCodeSize)
                 .padding()
             
             Text(qrCodes[index].text)
                 .font(.caption)
                 .lineLimit(2)
-                .padding(.horizontal)
-                .padding(.bottom, 5)
+                .frame(maxWidth: displayQRCodeSize + 30)
         }
         .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
         .cornerRadius(8)
@@ -789,6 +1022,8 @@ struct QRCodeDetailView: View {
     let text: String
     let onDismiss: () -> Void
     
+    @State private var detailQRCodeSize: CGFloat = 300 // 详情视图二维码尺寸
+    
     var body: some View {
         VStack(spacing: 20) {
             HStack {
@@ -806,8 +1041,31 @@ struct QRCodeDetailView: View {
                 .resizable()
                 .interpolation(.none)
                 .scaledToFit()
-                .frame(minWidth: 250, maxWidth: 400, maxHeight: 400)
+                .frame(width: detailQRCodeSize, height: detailQRCodeSize)
                 .padding()
+            
+            // 二维码尺寸调整控件
+            HStack(spacing: 10) {
+                Button(action: { detailQRCodeSize = max(detailQRCodeSize - 50, 150) }) {
+                    Image(systemName: "minus.magnifyingglass")
+                }
+                .buttonStyle(.bordered)
+                .disabled(detailQRCodeSize <= 150)
+                
+                Slider(value: $detailQRCodeSize, in: 150...500, step: 25)
+                    .frame(width: 150)
+                
+                Button(action: { detailQRCodeSize = min(detailQRCodeSize + 50, 500) }) {
+                    Image(systemName: "plus.magnifyingglass")
+                }
+                .buttonStyle(.bordered)
+                .disabled(detailQRCodeSize >= 500)
+                
+                Text("\(Int(detailQRCodeSize))×\(Int(detailQRCodeSize))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 60)
+            }
             
             ScrollView {
                 Text(text)
@@ -872,6 +1130,274 @@ struct QRCodeDetailView: View {
     }
     
     // 将二维码内容生成图片并保存到指定路径
+    private func saveQRImageToFile(content: String, url: URL) {
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return }
+        let data = content.data(using: .utf8)
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("H", forKey: "inputCorrectionLevel") // 高纠错级别
+        
+        if let outputImage = filter.outputImage {
+            let size: CGFloat = 1024
+            let scaleX = size / outputImage.extent.size.width
+            let scaleY = size / outputImage.extent.size.height
+            let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+            
+            let context = CIContext()
+            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
+                let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: size, height: size))
+                
+                if let tiffData = nsImage.tiffRepresentation,
+                   let bitmapRep = NSBitmapImageRep(data: tiffData),
+                   let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+                    
+                    do {
+                        try pngData.write(to: url)
+                    } catch {
+                        print("保存失败: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 批次历史记录视图
+struct BatchHistoryView: View {
+    let timestamp: Date
+    let historyItems: [QRCodeHistoryItem]
+    let onDismiss: () -> Void
+    
+    @State private var selectedQRCode: QRCodeDetailWrapper? = nil
+    @State private var columns = [GridItem(.adaptive(minimum: 180))]
+    @State private var gridSpacing: CGFloat = 20
+    @State private var displayQRCodeSize: CGFloat = 150 // 二维码显示尺寸
+    
+    var body: some View {
+        VStack {
+            // 标题栏
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("批量生成历史记录")
+                        .font(.headline)
+                    
+                    Text("生成时间: \(formattedTimestamp)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Button("导出全部") {
+                    exportAllQRCodes()
+                }
+                .buttonStyle(.bordered)
+                
+                Button("关闭") {
+                    onDismiss()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+            }
+            .padding()
+            
+            // 控制栏
+            VStack(spacing: 10) {
+                HStack {
+                    Text("共\(historyItems.count)个二维码")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Button(action: { columns = [GridItem(.adaptive(minimum: 120))] }) {
+                        Image(systemName: "square.grid.3x3")
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button(action: { columns = [GridItem(.adaptive(minimum: 180))] }) {
+                        Image(systemName: "square.grid.2x2")
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button(action: { columns = [GridItem(.adaptive(minimum: 250))] }) {
+                        Image(systemName: "square.grid.2x2.fill")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                
+                HStack {
+                    Text("间距:")
+                        .font(.caption)
+                    Slider(value: $gridSpacing, in: 10...50, step: 5)
+                        .frame(width: 120)
+                    Text("\(Int(gridSpacing))px")
+                        .font(.caption)
+                        .frame(width: 50, alignment: .trailing)
+                    
+                    Spacer()
+                    
+                    Text("二维码尺寸:")
+                        .font(.caption)
+                    Slider(value: $displayQRCodeSize, in: 80...250, step: 10)
+                        .frame(width: 120)
+                    Text("\(Int(displayQRCodeSize))px")
+                        .font(.caption)
+                        .frame(width: 50, alignment: .trailing)
+                }
+            }
+            .padding(.horizontal)
+            
+            // 网格视图
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: gridSpacing) {
+                    ForEach(Array(historyItems.enumerated()), id: \.element.id) { index, item in
+                        VStack {
+                            item.image
+                                .resizable()
+                                .interpolation(.none)
+                                .scaledToFit()
+                                .frame(width: displayQRCodeSize, height: displayQRCodeSize)
+                                .padding()
+                            
+                            Text(item.text)
+                                .font(.caption)
+                                .lineLimit(2)
+                                .frame(maxWidth: displayQRCodeSize + 30)
+                            
+                            if let batchIndex = item.batchIndex {
+                                Text("序号: \(batchIndex + 1)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
+                        .cornerRadius(8)
+                        .shadow(radius: 2)
+                        .onTapGesture {
+                            selectedQRCode = QRCodeDetailWrapper(id: index)
+                        }
+                        .contextMenu {
+                            Button("保存图片") {
+                                saveQRCodeImage(item: item)
+                            }
+                            Button("复制内容") {
+                                #if os(macOS)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(item.text, forType: .string)
+                                #endif
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+        }
+        .frame(minWidth: 700, minHeight: 500)
+        .sheet(item: $selectedQRCode) { wrapper in
+            if wrapper.id < historyItems.count {
+                let item = historyItems[wrapper.id]
+                QRCodeDetailView(
+                    qrCode: item.image,
+                    text: item.text,
+                    onDismiss: { selectedQRCode = nil }
+                )
+            }
+        }
+        .onAppear {
+            setupSheetSize()
+        }
+    }
+    
+    // 设置Sheet窗口大小
+    private func setupSheetSize() {
+        #if os(macOS)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let window = NSApp.windows.first(where: { $0.isVisible && $0 != NSApp.mainWindow }) {
+                window.setContentSize(NSSize(width: 800, height: 600))
+                window.minSize = NSSize(width: 700, height: 500)
+            }
+        }
+        #endif
+    }
+    
+    // 时间戳格式化
+    private var formattedTimestamp: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter.string(from: timestamp)
+    }
+    
+    // 导出所有二维码
+    private func exportAllQRCodes() {
+        #if os(macOS)
+        let openPanel = NSOpenPanel()
+        openPanel.title = "选择保存目录"
+        openPanel.canChooseDirectories = true
+        openPanel.canChooseFiles = false
+        openPanel.canCreateDirectories = true
+        
+        openPanel.begin { response in
+            if response == .OK, let url = openPanel.url {
+                // 创建导出信息文本
+                var exportInfo = "二维码批量导出信息\n"
+                exportInfo += "生成时间: \(formattedTimestamp)\n"
+                exportInfo += "导出时间: \(Date().formatted(date: .complete, time: .complete))\n"
+                exportInfo += "共\(historyItems.count)个二维码\n\n"
+                
+                // 批量保存二维码图片
+                for item in historyItems {
+                    // 构建文件名：使用索引和部分内容
+                    let index = item.batchIndex ?? 0
+                    let shortContent = String(item.text.prefix(20))
+                        .replacingOccurrences(of: "/", with: "-")
+                        .replacingOccurrences(of: "\\", with: "-")
+                        .replacingOccurrences(of: ":", with: "-")
+                        .replacingOccurrences(of: "*", with: "-")
+                        .replacingOccurrences(of: "?", with: "-")
+                        .replacingOccurrences(of: "\"", with: "-")
+                        .replacingOccurrences(of: "<", with: "-")
+                        .replacingOccurrences(of: ">", with: "-")
+                        .replacingOccurrences(of: "|", with: "-")
+                    let fileName = "\(index+1)_\(shortContent).png"
+                    let fileURL = url.appendingPathComponent(fileName)
+                    
+                    // 保存二维码图片
+                    saveQRImageToFile(content: item.text, url: fileURL)
+                    
+                    // 添加导出信息
+                    exportInfo += "序号: \(index+1)\n"
+                    exportInfo += "文件名: \(fileName)\n"
+                    exportInfo += "内容: \(item.text)\n\n"
+                }
+                
+                // 保存导出信息文本文件
+                let infoFileURL = url.appendingPathComponent("导出信息.txt")
+                try? exportInfo.write(to: infoFileURL, atomically: true, encoding: .utf8)
+                
+                // 打开导出目录
+                NSWorkspace.shared.open(url)
+            }
+        }
+        #endif
+    }
+    
+    // 保存单个二维码图片
+    private func saveQRCodeImage(item: QRCodeHistoryItem) {
+        #if os(macOS)
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.png]
+        let index = item.batchIndex ?? 0
+        savePanel.nameFieldStringValue = "QRCode-\(index+1).png"
+        
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                saveQRImageToFile(content: item.text, url: url)
+            }
+        }
+        #endif
+    }
+    
+    // 生成并保存二维码
     private func saveQRImageToFile(content: String, url: URL) {
         guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return }
         let data = content.data(using: .utf8)
