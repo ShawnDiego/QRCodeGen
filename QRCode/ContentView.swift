@@ -9,6 +9,7 @@ struct QRCodeHistoryItem: Identifiable {
     let isBatchGenerated: Bool // 是否为批量生成的一部分
     let batchIndex: Int? // 在批量生成中的索引，可选
     let batchTimestamp: Date? // 批量生成的时间戳，用于将同一批次的项目关联起来
+    let createTime: Date // 生成时间
     
     // 简便初始化方法，默认为非批量生成
     init(image: Image, text: String) {
@@ -17,6 +18,7 @@ struct QRCodeHistoryItem: Identifiable {
         self.isBatchGenerated = false
         self.batchIndex = nil
         self.batchTimestamp = nil
+        self.createTime = Date()
     }
     
     // 批量生成项目的初始化方法
@@ -26,6 +28,7 @@ struct QRCodeHistoryItem: Identifiable {
         self.isBatchGenerated = true
         self.batchIndex = batchIndex
         self.batchTimestamp = batchTimestamp
+        self.createTime = Date()
     }
 }
 
@@ -149,8 +152,8 @@ struct ContentView: View {
                                         .lineLimit(1)
                                         .truncationMode(.tail) // 文字过长时截断
                                     
-                                    if item.isBatchGenerated {
-                                        HStack(spacing: 4) {
+                                    HStack(spacing: 4) {
+                                        if item.isBatchGenerated {
                                             Image(systemName: "rectangle.on.rectangle")
                                                 .font(.caption2)
                                                 .foregroundColor(.blue)
@@ -159,6 +162,10 @@ struct ContentView: View {
                                                 .font(.caption2)
                                                 .foregroundColor(.blue)
                                         }
+                                        
+                                        Text(item.createTime.formatted(date: .numeric, time: .shortened))
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
                                     }
                                 }
                                 
