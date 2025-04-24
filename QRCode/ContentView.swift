@@ -26,6 +26,9 @@ struct ContentView: View {
     @State private var batchQRCodeSize: CGFloat = 150 // 批量二维码的默认大小
     @State private var isBatchGenerationEnabled = false // 控制批量生成功能的启用状态
     
+    // 添加变量命名转换视图的状态变量
+    @State private var showNameConverterView = false
+    
     // 自定义生成二维码按钮视图
     private var generateQRCodeButton: some View {
         Button {
@@ -201,8 +204,15 @@ struct ContentView: View {
                                 Label(isWindowAlwaysOnTop ? "取消置顶" : "置顶窗口", systemImage: isWindowAlwaysOnTop ? "pin.slash" : "pin")
                             }
                             .padding(.horizontal)
+                            
+                            // 添加变量命名转换工具入口
+                            Button {
+                                showNameConverterView = true
+                            } label: {
+                                Label("变量命名转换", systemImage: "character.textbox")
+                            }
+                            .padding(.horizontal)
                         }
-
                         #endif
 
                         Spacer()
@@ -480,6 +490,10 @@ struct ContentView: View {
                         onDismiss: { showBatchHistoryView = false }
                     )
                 }
+            }
+            // 添加变量命名转换视图的sheet
+            .sheet(isPresented: $showNameConverterView) {
+                NameConverterView()
             }
         }
         .frame(minWidth: 700, minHeight: 650)
