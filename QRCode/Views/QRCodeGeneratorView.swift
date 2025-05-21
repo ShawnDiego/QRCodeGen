@@ -81,8 +81,8 @@ struct QRCodeGeneratorView: View {
                     .fill(
                         LinearGradient(
                             gradient: Gradient(colors: [
-                                Color.blue,
-                                Color.blue.opacity(0.8)
+                                input.isEmpty || isGenerating ? Color.gray.opacity(0.7) : Color.blue,
+                                input.isEmpty || isGenerating ? Color.gray.opacity(0.5) : Color.blue.opacity(0.8)
                             ]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -171,9 +171,23 @@ struct QRCodeGeneratorView: View {
                     showDeleteConfirmation = true
                 } label: {
                     Label("全部删除", systemImage: "trash")
-                        .foregroundColor(.red)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.red.opacity(0.8))
+                                
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                            }
+                        )
                 }
-                .buttonStyle(.plain) // 移除默认背景样式
+                .buttonStyle(.plain)
+                .opacity(history.isEmpty ? 0.5 : 1.0)
+                .disabled(history.isEmpty)
                 .padding()
                 .confirmationDialog("确定要删除所有历史记录吗？", isPresented: $showDeleteConfirmation) {
                     Button("删除所有", role: .destructive) {
@@ -192,7 +206,19 @@ struct QRCodeGeneratorView: View {
                         Button("查看批量生成结果 (\(batchGeneratedQRCodes.count)个)") {
                             showBatchView = true
                         }
-                        .buttonStyle(.bordered)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.blue.opacity(0.1))
+                                
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                            }
+                        )
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.blue)
                     }
 
                     if showBatchView && !batchGeneratedQRCodes.isEmpty {
@@ -222,8 +248,20 @@ struct QRCodeGeneratorView: View {
                             HStack(spacing: 15) {
                                 Button(action: { qrCodeSize = max(qrCodeSize - 50, 100) }) {
                                     Image(systemName: "minus.magnifyingglass")
+                                        .font(.system(size: 12))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .foregroundColor(qrCodeSize <= 100 ? Color.gray : Color(NSColor.controlTextColor))
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(Color(NSColor.controlBackgroundColor))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                )
+                                        )
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.plain)
                                 .disabled(qrCodeSize <= 100)
                                 
                                 Text("\(Int(qrCodeSize))×\(Int(qrCodeSize))")
@@ -232,8 +270,20 @@ struct QRCodeGeneratorView: View {
                                 
                                 Button(action: { qrCodeSize = min(qrCodeSize + 50, 400) }) {
                                     Image(systemName: "plus.magnifyingglass")
+                                        .font(.system(size: 12))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .foregroundColor(qrCodeSize >= 400 ? Color.gray : Color(NSColor.controlTextColor))
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(Color(NSColor.controlBackgroundColor))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                )
+                                        )
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.plain)
                                 .disabled(qrCodeSize >= 400)
                             }
                         }

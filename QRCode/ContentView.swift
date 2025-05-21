@@ -15,9 +15,22 @@ struct ContentView: View {
                 Button {
                     toggleWindowAlwaysOnTop()
                 } label: {
-                    Label(isWindowAlwaysOnTop ? "取消置顶" : "置顶窗口", systemImage: isWindowAlwaysOnTop ? "pin.slash" : "pin")
+                    Label(isWindowAlwaysOnTop ? "取消置顶" : "置顶窗口", 
+                          systemImage: isWindowAlwaysOnTop ? "pin.slash" : "pin")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(isWindowAlwaysOnTop ? Color.blue.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(isWindowAlwaysOnTop ? Color.blue.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
+                            }
+                        )
+                        .foregroundColor(isWindowAlwaysOnTop ? Color.blue : Color(NSColor.controlTextColor))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
                 .padding(.horizontal, 6)
                 #endif
                 
@@ -42,6 +55,13 @@ struct ContentView: View {
                         Label("变量命名转换", systemImage: "character.textbox")
                     }
                     .tag(1)
+                
+                // 时间戳转换器模块
+                TimestampConverterView()
+                    .tabItem {
+                        Label("时间戳转换", systemImage: "clock")
+                    }
+                    .tag(2)
             }
         }
         .frame(minWidth: 700, minHeight: 650)
@@ -62,9 +82,13 @@ struct ContentView: View {
     
     /// 切换窗口置顶状态（仅限 macOS）
     #if os(macOS)
-    func toggleWindowAlwaysOnTop() {
-        if let window = NSApp.keyWindow {
-            window.level = isWindowAlwaysOnTop ? .normal : .floating
+    private func toggleWindowAlwaysOnTop() {
+        if let window = NSApp.windows.first {
+            if isWindowAlwaysOnTop {
+                window.level = .normal
+            } else {
+                window.level = .floating
+            }
             isWindowAlwaysOnTop.toggle()
         }
     }

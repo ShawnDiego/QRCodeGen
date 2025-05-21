@@ -16,6 +16,9 @@ struct BatchQRCodeDisplayView: View {
     /// 二维码大小调整
     @State private var qrCodeSize: CGFloat = 150
     
+    /// 复制状态跟踪
+    @State private var copiedIndex: Int? = nil
+    
     var body: some View {
         VStack(spacing: 15) {
             // 顶部工具栏
@@ -30,8 +33,28 @@ struct BatchQRCodeDisplayView: View {
                     exportQRCodes()
                 } label: {
                     Label("导出全部", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            isExporting ? Color.gray.opacity(0.7) : Color.blue,
+                                            isExporting ? Color.gray.opacity(0.5) : Color.blue.opacity(0.8)
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ))
+                                
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            }
+                        )
+                        .foregroundColor(.white)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(isExporting)
                 
                 // 关闭按钮
@@ -39,8 +62,21 @@ struct BatchQRCodeDisplayView: View {
                     onDismiss()
                 } label: {
                     Label("关闭", systemImage: "xmark.circle")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(NSColor.controlBackgroundColor))
+                                
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            }
+                        )
+                        .foregroundColor(Color(NSColor.controlTextColor))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
             }
             .padding([.horizontal, .top])
             
@@ -92,22 +128,73 @@ struct BatchQRCodeDisplayView: View {
                                 .lineLimit(2)
                                 .frame(width: qrCodeSize + 20)
                                 .multilineTextAlignment(.center)
+                            
+                            // 添加复制和导出按钮
+                            HStack(spacing: 8) {
+                                // 复制按钮
+                                Button {
+                                    #if os(macOS)
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(qrCodes[index].text, forType: .string)
+                                    #endif
+                                    
+                                    copiedIndex = index
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        if copiedIndex == index {
+                                            copiedIndex = nil
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: copiedIndex == index ? "checkmark" : "doc.on.doc")
+                                            .font(.system(size: 10))
+                                        
+                                        Text(copiedIndex == index ? "已复制" : "复制")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(copiedIndex == index ? Color.green.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(copiedIndex == index ? Color.green.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
+                                        }
+                                    )
+                                    .foregroundColor(copiedIndex == index ? Color.green : Color(NSColor.controlTextColor))
+                                }
+                                .buttonStyle(.plain)
+                                
+                                // 导出按钮
+                                Button {
+                                    exportSingleQRCode(index: index)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "square.and.arrow.up")
+                                            .font(.system(size: 10))
+                                        
+                                        Text("导出")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(Color.blue.opacity(0.1))
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                        }
+                                    )
+                                    .foregroundColor(Color.blue)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                         .padding()
                         .background(Color(NSColor.windowBackgroundColor))
                         .cornerRadius(12)
-                        .contextMenu {
-                            Button("复制内容") {
-                                #if os(macOS)
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(qrCodes[index].text, forType: .string)
-                                #endif
-                            }
-                            
-                            Button("导出此二维码") {
-                                exportSingleQRCode(index: index)
-                            }
-                        }
                     }
                 }
                 .padding()

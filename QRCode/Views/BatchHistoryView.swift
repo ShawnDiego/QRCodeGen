@@ -18,6 +18,9 @@ struct BatchHistoryView: View {
     @State private var isExporting = false
     @State private var exportMessage = ""
     
+    /// 复制状态跟踪
+    @State private var copiedItemId: UUID? = nil
+    
     var body: some View {
         VStack(spacing: 15) {
             // 顶部标题和工具栏
@@ -38,8 +41,29 @@ struct BatchHistoryView: View {
                     exportBatch()
                 } label: {
                     Label("导出批次", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            (historyItems.isEmpty || isExporting) ? Color.gray.opacity(0.7) : Color.blue,
+                                            (historyItems.isEmpty || isExporting) ? Color.gray.opacity(0.5) : Color.blue.opacity(0.8)
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ))
+                                
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            }
+                        )
+                        .foregroundColor(.white)
+                        .opacity(historyItems.isEmpty || isExporting ? 0.7 : 1.0)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(historyItems.isEmpty || isExporting)
                 
                 // 关闭按钮
@@ -47,8 +71,21 @@ struct BatchHistoryView: View {
                     onDismiss()
                 } label: {
                     Label("关闭", systemImage: "xmark.circle")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(NSColor.controlBackgroundColor))
+                                
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            }
+                        )
+                        .foregroundColor(Color(NSColor.controlTextColor))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
             }
             .padding([.horizontal, .top])
             
@@ -97,24 +134,75 @@ struct BatchHistoryView: View {
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
+                                
+                                // 添加复制和导出按钮
+                                HStack(spacing: 8) {
+                                    // 复制按钮
+                                    Button {
+                                        #if os(macOS)
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(item.text, forType: .string)
+                                        #endif
+                                        
+                                        copiedItemId = item.id
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                            if copiedItemId == item.id {
+                                                copiedItemId = nil
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: copiedItemId == item.id ? "checkmark" : "doc.on.doc")
+                                                .font(.system(size: 10))
+                                            
+                                            Text(copiedItemId == item.id ? "已复制" : "复制")
+                                                .font(.system(size: 10, weight: .medium))
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            ZStack {
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .fill(copiedItemId == item.id ? Color.green.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .stroke(copiedItemId == item.id ? Color.green.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
+                                            }
+                                        )
+                                        .foregroundColor(copiedItemId == item.id ? Color.green : Color(NSColor.controlTextColor))
+                                    }
+                                    .buttonStyle(.plain)
+                                    
+                                    // 导出按钮
+                                    Button {
+                                        exportSingleQRCode(item: item)
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "square.and.arrow.up")
+                                                .font(.system(size: 10))
+                                            
+                                            Text("导出")
+                                                .font(.system(size: 10, weight: .medium))
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            ZStack {
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .fill(Color.blue.opacity(0.1))
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                            }
+                                        )
+                                        .foregroundColor(Color.blue)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                             .padding()
                             .background(Color(NSColor.windowBackgroundColor))
                             .cornerRadius(12)
                             .onTapGesture {
                                 selectedItem = item
-                            }
-                            .contextMenu {
-                                Button("复制内容") {
-                                    #if os(macOS)
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(item.text, forType: .string)
-                                    #endif
-                                }
-                                
-                                Button("导出此二维码") {
-                                    exportSingleQRCode(item: item)
-                                }
                             }
                         }
                     }

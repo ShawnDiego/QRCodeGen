@@ -6,6 +6,7 @@ struct NameConverterView: View {
     @State private var detectedConvention: NamingConvention = .unknown
     @State private var conversions: [NamingConvention: String] = [:]
     @State private var showPasteButton: Bool = true
+    @State private var copiedIndex: Int? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -26,14 +27,40 @@ struct NameConverterView: View {
                 if showPasteButton {
                     Button(action: pasteFromClipboard) {
                         Label("粘贴", systemImage: "doc.on.clipboard")
+                            .font(.system(size: 12, weight: .medium))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                     }
-                    .buttonStyle(.bordered)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(NSColor.controlBackgroundColor))
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        }
+                    )
+                    .foregroundColor(Color(NSColor.controlTextColor))
+                    .buttonStyle(.plain)
                 }
                 
                 Button(action: clearInput) {
                     Label("清除", systemImage: "xmark.circle")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.bordered)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.red.opacity(0.05))
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                    }
+                )
+                .foregroundColor(Color.red)
+                .buttonStyle(.plain)
+                .disabled(inputText.isEmpty)
+                .opacity(inputText.isEmpty ? 0.5 : 1.0)
             }
             
             // 检测到的命名规范
@@ -51,7 +78,7 @@ struct NameConverterView: View {
             // 转换结果
             if !inputText.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach([NamingConvention.camelCase, .pascalCase, .snakeCase, .kebabCase, .upperSnakeCase, .spacedCase], id: \.self) { convention in
+                    ForEach(Array([NamingConvention.camelCase, .pascalCase, .snakeCase, .kebabCase, .upperSnakeCase, .spacedCase].enumerated()), id: \.element) { index, convention in
                         if let conversion = conversions[convention] {
                             HStack {
                                 // 命名法标签
@@ -73,11 +100,35 @@ struct NameConverterView: View {
                                 // 复制按钮
                                 Button(action: {
                                     copyToClipboard(conversion)
+                                    copiedIndex = index
+                                    
+                                    // 2秒后重置复制状态
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        if copiedIndex == index {
+                                            copiedIndex = nil
+                                        }
+                                    }
                                 }) {
-                                    Image(systemName: "doc.on.doc")
-                                        .font(.caption)
+                                    HStack(spacing: 4) {
+                                        Image(systemName: copiedIndex == index ? "checkmark" : "doc.on.doc")
+                                            .font(.system(size: 10))
+                                        
+                                        Text(copiedIndex == index ? "已复制" : "复制")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(copiedIndex == index ? Color.green.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(copiedIndex == index ? Color.green.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
+                                        }
+                                    )
+                                    .foregroundColor(copiedIndex == index ? Color.green : Color(NSColor.controlTextColor))
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.plain)
                             }
                             .padding(.vertical, 2)
                         }
