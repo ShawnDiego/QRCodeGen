@@ -4,9 +4,9 @@ import CoreImage.CIFilterBuiltins
 
 /// 二维码生成器视图
 struct QRCodeGeneratorView: View {
+    @StateObject private var historyManager = QRCodeHistoryManager()
     @State private var input: String = ""
     @State private var qrCode: Image?
-    @State private var history: [QRCodeHistoryItem] = [] // 存储二维码和文字的历史记录
     @State private var showDeleteConfirmation = false // 控制"全部删除"确认对话框
     @State private var isWindowAlwaysOnTop = false // 窗口置顶状态
     
@@ -52,7 +52,7 @@ struct QRCodeGeneratorView: View {
                 if let newQRCode = createQRCodeImage(content: input, size: qrCodeSize) {
                     qrCode = newQRCode
                     let newItem = QRCodeHistoryItem(image: newQRCode, text: input)
-                    history.insert(newItem, at: 0) // 将新记录添加到历史顶部
+                    historyManager.addHistoryItem(newItem)
                     isGenerating = false
                     generationMessage = "生成成功！"
                 } else {
@@ -109,7 +109,7 @@ struct QRCodeGeneratorView: View {
             VStack {
                 List {
                     Section(header: Text("历史记录")) {
-                        ForEach(history) { item in
+                        ForEach(historyManager.historyItems) { item in
                             HStack {
                                 item.image
                                     .resizable()
@@ -186,12 +186,12 @@ struct QRCodeGeneratorView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .opacity(history.isEmpty ? 0.5 : 1.0)
-                .disabled(history.isEmpty)
+                .opacity(historyManager.historyItems.isEmpty ? 0.5 : 1.0)
+                .disabled(historyManager.historyItems.isEmpty)
                 .padding()
                 .confirmationDialog("确定要删除所有历史记录吗？", isPresented: $showDeleteConfirmation) {
                     Button("删除所有", role: .destructive) {
-                        history.removeAll()
+                        historyManager.deleteAllHistoryItems()
                     }
                     Button("取消", role: .cancel) { }
                 }
@@ -503,7 +503,7 @@ struct QRCodeGeneratorView: View {
                 if let timestamp = selectedBatchTimestamp {
                     BatchHistoryView(
                         timestamp: timestamp,
-                        historyItems: history.filter { $0.batchTimestamp == timestamp },
+                        historyItems: historyManager.getBatchItems(with: timestamp),
                         onDismiss: { showBatchHistoryView = false }
                     )
                 }
@@ -561,6 +561,7 @@ struct QRCodeGeneratorView: View {
         }
         
         var newQRCodes: [(text: String, image: Image)] = []
+        var historyItems: [QRCodeHistoryItem] = []
         let batchTimestamp = Date() // 为整个批次创建一个时间戳
         
         for (index, text) in texts.enumerated() {
@@ -576,14 +577,16 @@ struct QRCodeGeneratorView: View {
                     batchTimestamp: batchTimestamp
                 )
                 
-                // 检查是否已存在相同内容的记录，避免重复
-                if !history.contains(where: { $0.text == trimmedText }) {
-                    history.insert(newItem, at: 0) // 将新记录添加到历史顶部
-                }
+                historyItems.append(newItem)
             }
         }
         
         batchGeneratedQRCodes = newQRCodes
+        
+        // 批量添加到历史记录
+        if !historyItems.isEmpty {
+            historyManager.addBatchHistoryItems(historyItems)
+        }
     }
 
     // 自动检测输入内容中可能的分隔符
@@ -642,9 +645,7 @@ struct QRCodeGeneratorView: View {
 
     /// 删除单条历史记录
     func deleteItem(_ item: QRCodeHistoryItem) {
-        if let index = history.firstIndex(where: { $0.id == item.id }) {
-            history.remove(at: index)
-        }
+        historyManager.deleteHistoryItem(withId: item.id)
     }
 
     /// 选择历史记录条目

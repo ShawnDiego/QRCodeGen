@@ -4,7 +4,7 @@ import SwiftUI
 /// 用于存储生成的二维码及其相关信息
 struct QRCodeHistoryItem: Identifiable {
     /// 唯一标识符
-    let id = UUID()
+    let id: UUID
     
     /// 二维码图片
     let image: Image
@@ -29,6 +29,7 @@ struct QRCodeHistoryItem: Identifiable {
     ///   - image: 二维码图片
     ///   - text: 二维码内容
     init(image: Image, text: String) {
+        self.id = UUID()
         self.image = image
         self.text = text
         self.isBatchGenerated = false
@@ -44,11 +45,46 @@ struct QRCodeHistoryItem: Identifiable {
     ///   - batchIndex: 在批量生成中的索引
     ///   - batchTimestamp: 批量生成的时间戳
     init(image: Image, text: String, batchIndex: Int, batchTimestamp: Date) {
+        self.id = UUID()
         self.image = image
         self.text = text
         self.isBatchGenerated = true
         self.batchIndex = batchIndex
         self.batchTimestamp = batchTimestamp
         self.createTime = Date()
+    }
+    
+    /// 从CoreData加载的完整初始化方法（单个二维码）
+    /// - Parameters:
+    ///   - image: 二维码图片
+    ///   - text: 二维码内容
+    ///   - id: 唯一标识符
+    ///   - createTime: 创建时间
+    init(image: Image, text: String, id: UUID, createTime: Date) {
+        self.id = id
+        self.image = image
+        self.text = text
+        self.isBatchGenerated = false
+        self.batchIndex = nil
+        self.batchTimestamp = nil
+        self.createTime = createTime
+    }
+    
+    /// 从CoreData加载的完整初始化方法（批量二维码）
+    /// - Parameters:
+    ///   - image: 二维码图片
+    ///   - text: 二维码内容
+    ///   - batchIndex: 在批量生成中的索引
+    ///   - batchTimestamp: 批量生成的时间戳
+    ///   - id: 唯一标识符
+    ///   - createTime: 创建时间
+    init(image: Image, text: String, batchIndex: Int, batchTimestamp: Date, id: UUID, createTime: Date) {
+        self.id = id
+        self.image = image
+        self.text = text
+        self.isBatchGenerated = true
+        self.batchIndex = batchIndex
+        self.batchTimestamp = batchTimestamp
+        self.createTime = createTime
     }
 } 
