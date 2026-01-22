@@ -62,6 +62,13 @@ struct ContentView: View {
                         Label("时间戳转换", systemImage: "clock")
                     }
                     .tag(2)
+                
+                // 进制转换器模块
+                BaseConverterView()
+                    .tabItem {
+                        Label("进制转换", systemImage: "numbersign")
+                    }
+                    .tag(3)
             }
         }
         .frame(minWidth: 700, minHeight: 650)
